@@ -5,11 +5,12 @@ import { ApiService } from '../../../core/services/api.service';
 import { Appointment, Doctor } from '../../../core/models';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { UrgencyBadgeComponent } from '../../../shared/components/urgency-badge/urgency-badge.component';
+import { DoctorNamePipe } from '../../../shared/pipes/doctor-name.pipe';
 
 @Component({
   selector: 'app-admin-appointment-overview',
   standalone: true,
-  imports: [CommonModule, FormsModule, LoadingSpinnerComponent, UrgencyBadgeComponent],
+  imports: [CommonModule, FormsModule, LoadingSpinnerComponent, UrgencyBadgeComponent, DoctorNamePipe],
   template: `
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       
@@ -36,7 +37,7 @@ import { UrgencyBadgeComponent } from '../../../shared/components/urgency-badge/
           <select [(ngModel)]="doctorFilter" (change)="loadAppointments()"
                   class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none">
             <option value="">All Doctors</option>
-            <option *ngFor="let doc of doctors()" [value]="doc.id">{{ doc.full_name }} ({{ doc.specialisation }})</option>
+            <option *ngFor="let doc of doctors()" [value]="doc.id">{{ doc.full_name | doctorName }} ({{ doc.specialisation }})</option>
           </select>
         </div>
 
@@ -68,7 +69,7 @@ import { UrgencyBadgeComponent } from '../../../shared/components/urgency-badge/
             <tbody class="divide-y divide-slate-100 text-slate-700">
               <tr *ngFor="let appt of appointments()" class="hover:bg-slate-50/70 transition">
                 <td class="py-4 px-6 font-bold text-slate-900">
-                  Dr. {{ appt.doctor_name }}
+                  {{ appt.doctor_name | doctorName }}
                   <span class="block text-[11px] font-normal text-slate-400">{{ appt.doctor_specialisation }}</span>
                 </td>
                 <td class="py-4 px-6 font-semibold text-slate-800">

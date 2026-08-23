@@ -7,11 +7,12 @@ import { NotificationService } from '../../../core/services/notification.service
 import { Appointment } from '../../../core/models';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { UrgencyBadgeComponent } from '../../../shared/components/urgency-badge/urgency-badge.component';
+import { DoctorNamePipe } from '../../../shared/pipes/doctor-name.pipe';
 
 @Component({
   selector: 'app-patient-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterModule, LoadingSpinnerComponent, UrgencyBadgeComponent],
+  imports: [CommonModule, RouterModule, LoadingSpinnerComponent, UrgencyBadgeComponent, DoctorNamePipe],
   template: `
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       
@@ -127,7 +128,7 @@ import { UrgencyBadgeComponent } from '../../../shared/components/urgency-badge/
             <div>
               <div class="flex items-start justify-between gap-2 mb-3">
                 <div>
-                  <h4 class="text-base font-bold text-slate-900 dark:text-white">Dr. {{ appt.doctor_name }}</h4>
+                  <h4 class="text-base font-bold text-slate-900 dark:text-white">{{ appt.doctor_name | doctorName }}</h4>
                   <span class="text-xs font-semibold text-brand-600 dark:text-brand-400">{{ appt.doctor_specialisation }}</span>
                 </div>
                 <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300">

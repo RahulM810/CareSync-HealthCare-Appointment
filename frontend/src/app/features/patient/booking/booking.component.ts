@@ -6,11 +6,12 @@ import { ApiService } from '../../../core/services/api.service';
 import { NotificationService } from '../../../core/services/notification.service';
 import { Doctor, SlotItem, HoldSlotResponse } from '../../../core/models';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
+import { DoctorNamePipe } from '../../../shared/pipes/doctor-name.pipe';
 
 @Component({
   selector: 'app-booking',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, LoadingSpinnerComponent],
+  imports: [CommonModule, FormsModule, RouterModule, LoadingSpinnerComponent, DoctorNamePipe],
   template: `
     <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       
@@ -24,7 +25,7 @@ import { LoadingSpinnerComponent } from '../../../shared/components/loading-spin
         </a>
         <h1 class="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">Book Consultation</h1>
         <p *ngIf="doctor()" class="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          With <strong class="text-slate-700 dark:text-slate-200">{{ doctor()?.full_name }}</strong> ({{ doctor()?.specialisation }})
+          With <strong class="text-slate-700 dark:text-slate-200">{{ doctor()?.full_name | doctorName }}</strong> ({{ doctor()?.specialisation }})
         </p>
 
         <!-- 4-Step Progress Bar -->
@@ -187,7 +188,7 @@ import { LoadingSpinnerComponent } from '../../../shared/components/loading-spin
           <div class="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-6 border border-slate-200/80 dark:border-slate-700 space-y-4 text-xs">
             <div class="flex justify-between pb-3 border-b border-slate-200 dark:border-slate-700">
               <span class="text-slate-500 dark:text-slate-400 font-medium">Doctor:</span>
-              <span class="font-bold text-slate-900 dark:text-white">{{ doctor()?.full_name }} ({{ doctor()?.specialisation }})</span>
+              <span class="font-bold text-slate-900 dark:text-white">{{ doctor()?.full_name | doctorName }} ({{ doctor()?.specialisation }})</span>
             </div>
 
             <div class="flex justify-between pb-3 border-b border-slate-200 dark:border-slate-700">

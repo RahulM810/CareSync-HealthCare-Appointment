@@ -6,11 +6,12 @@ import { NotificationService } from '../../../core/services/notification.service
 import { Appointment } from '../../../core/models';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { UrgencyBadgeComponent } from '../../../shared/components/urgency-badge/urgency-badge.component';
+import { DoctorNamePipe } from '../../../shared/pipes/doctor-name.pipe';
 
 @Component({
   selector: 'app-patient-appointment-detail',
   standalone: true,
-  imports: [CommonModule, RouterModule, LoadingSpinnerComponent, UrgencyBadgeComponent],
+  imports: [CommonModule, RouterModule, LoadingSpinnerComponent, UrgencyBadgeComponent, DoctorNamePipe],
   template: `
     <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       
@@ -55,7 +56,7 @@ import { UrgencyBadgeComponent } from '../../../shared/components/urgency-badge/
           <div class="space-y-3">
             <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Doctor Information</p>
             <div>
-              <h3 class="text-lg font-bold text-slate-900">Dr. {{ appointment()?.doctor_name }}</h3>
+              <h3 class="text-lg font-bold text-slate-900">{{ appointment()?.doctor_name | doctorName }}</h3>
               <span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-brand-50 text-brand-700 mt-1">
                 {{ appointment()?.doctor_specialisation }}
               </span>

@@ -7,11 +7,12 @@ import { NotificationService } from '../../../core/services/notification.service
 import { Appointment, AppointmentStatus } from '../../../core/models';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { UrgencyBadgeComponent } from '../../../shared/components/urgency-badge/urgency-badge.component';
+import { DoctorNamePipe } from '../../../shared/pipes/doctor-name.pipe';
 
 @Component({
   selector: 'app-patient-appointments',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, LoadingSpinnerComponent, UrgencyBadgeComponent],
+  imports: [CommonModule, FormsModule, RouterModule, LoadingSpinnerComponent, UrgencyBadgeComponent, DoctorNamePipe],
   template: `
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       
@@ -79,7 +80,7 @@ import { UrgencyBadgeComponent } from '../../../shared/components/urgency-badge/
             </div>
 
             <div>
-              <h3 class="text-lg font-bold text-slate-900">Dr. {{ appt.doctor_name }}</h3>
+              <h3 class="text-lg font-bold text-slate-900">{{ appt.doctor_name | doctorName }}</h3>
               <p class="text-xs font-semibold text-brand-600">{{ appt.doctor_specialisation }}</p>
             </div>
 

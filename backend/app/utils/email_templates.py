@@ -1,4 +1,14 @@
+import re
 from jinja2 import Template
+
+def format_doctor_name(name: str | None) -> str:
+    if not name:
+        return ""
+    trimmed = name.strip()
+    if not trimmed:
+        return ""
+    cleaned = re.sub(r"^((dr\.?|doctor)\s*)+", "", trimmed, flags=re.IGNORECASE).strip()
+    return f"Dr. {cleaned}" if cleaned else trimmed
 
 BASE_LAYOUT = """<!DOCTYPE html>
 <html>
@@ -47,7 +57,7 @@ TEMPLATES = {
       <p>Your appointment has been successfully scheduled. Here are the details:</p>
       <div class="card">
         <div class="card-title">Appointment Details</div>
-        <p><strong>Doctor:</strong> Dr. {{ doctor_name }} ({{ doctor_specialisation }})</p>
+        <p><strong>Doctor:</strong> {{ doctor_name }} ({{ doctor_specialisation }})</p>
         <p><strong>Date & Time:</strong> {{ start_time }}</p>
         <p><strong>Location / Room:</strong> {{ room_number or 'Room 101, Main Clinic' }}</p>
         <p><strong>Chief Concern:</strong> {{ symptoms }}</p>
@@ -61,7 +71,7 @@ TEMPLATES = {
       <p>This is a friendly reminder that your consultation is scheduled in <strong>24 hours</strong>.</p>
       <div class="card">
         <div class="card-title">Appointment Summary</div>
-        <p><strong>Doctor:</strong> Dr. {{ doctor_name }}</p>
+        <p><strong>Doctor:</strong> {{ doctor_name }}</p>
         <p><strong>Date & Time:</strong> {{ start_time }}</p>
         <p><strong>Room:</strong> {{ room_number or 'Main Clinic' }}</p>
       </div>
@@ -71,7 +81,7 @@ TEMPLATES = {
     "cancellation_notice.html": """
       <h2>Appointment Cancelled</h2>
       <p>Hello <strong>{{ patient_name }}</strong>,</p>
-      <p>Your appointment on <strong>{{ start_time }}</strong> with Dr. {{ doctor_name }} has been cancelled.</p>
+      <p>Your appointment on <strong>{{ start_time }}</strong> with {{ doctor_name }} has been cancelled.</p>
       <div class="card" style="background:#fef2f2; border-color:#fecaca;">
         <p style="color:#b91c1c; margin:0;">Status: <strong>CANCELLED</strong></p>
       </div>
@@ -81,7 +91,7 @@ TEMPLATES = {
     "leave_conflict.html": """
       <h2>Doctor Schedule Notice ⚠️</h2>
       <p>Hello <strong>{{ patient_name }}</strong>,</p>
-      <p>Dr. {{ doctor_name }} will be unavailable on <strong>{{ leave_date }}</strong> due to scheduled leave.</p>
+      <p>{{ doctor_name }} will be unavailable on <strong>{{ leave_date }}</strong> due to scheduled leave.</p>
       <div class="card" style="background:#fffbeb; border-color:#fde68a;">
         <p style="color:#b45309; margin:0;">Your appointment on <strong>{{ start_time }}</strong> needs to be rescheduled.</p>
       </div>
@@ -91,7 +101,7 @@ TEMPLATES = {
     "post_visit_summary.html": """
       <h2>Your Post-Visit Clinical Summary 📋</h2>
       <p>Hello <strong>{{ patient_name }}</strong>,</p>
-      <p>Thank you for consulting Dr. {{ doctor_name }}. Here is a summary of your visit and treatment plan:</p>
+      <p>Thank you for consulting {{ doctor_name }}. Here is a summary of your visit and treatment plan:</p>
       <div class="card">
         <div class="card-title">Doctor's Assessment & Recommendations</div>
         <p>{{ post_visit_summary | replace('\n', '<br>') }}</p>
@@ -106,15 +116,17 @@ TEMPLATES = {
               <th>Dosage</th>
               <th>Frequency</th>
               <th>Duration</th>
+              <th>Instructions</th>
             </tr>
           </thead>
           <tbody>
-            {% for item in prescriptions %}
+            {% for rx in prescriptions %}
             <tr>
-              <td><strong>{{ item.medicine }}</strong></td>
-              <td>{{ item.dosage }}</td>
-              <td>{{ item.frequency }}</td>
-              <td>{{ item.duration_days }} days</td>
+              <td><strong>{{ rx.medicine_name }}</strong></td>
+              <td>{{ rx.dosage }}</td>
+              <td>{{ rx.frequency }}</td>
+              <td>{{ rx.duration }}</td>
+              <td>{{ rx.instructions or '-' }}</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -139,9 +151,13 @@ TEMPLATES = {
 }
 
 def render_email_template(template_name: str, context: dict) -> str:
+    ctx = dict(context)
+    if "doctor_name" in ctx and ctx["doctor_name"]:
+        ctx["doctor_name"] = format_doctor_name(str(ctx["doctor_name"]))
+    
     inner_template_str = TEMPLATES.get(template_name, "<p>{{ message }}</p>")
     inner_template = Template(inner_template_str)
-    rendered_inner = inner_template.render(**context)
+    rendered_inner = inner_template.render(**ctx)
     
     base_template = Template(BASE_LAYOUT)
     return base_template.render(content=rendered_inner)

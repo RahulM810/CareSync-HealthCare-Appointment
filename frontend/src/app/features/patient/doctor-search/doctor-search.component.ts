@@ -5,11 +5,12 @@ import { RouterModule } from '@angular/router';
 import { ApiService } from '../../../core/services/api.service';
 import { Doctor } from '../../../core/models';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
+import { DoctorNamePipe } from '../../../shared/pipes/doctor-name.pipe';
 
 @Component({
   selector: 'app-doctor-search',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, LoadingSpinnerComponent],
+  imports: [CommonModule, FormsModule, RouterModule, LoadingSpinnerComponent, DoctorNamePipe],
   template: `
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       
@@ -84,7 +85,7 @@ import { LoadingSpinnerComponent } from '../../../shared/components/loading-spin
                 {{ getInitials(doc.full_name) }}
               </div>
               <div>
-                <h3 class="text-base font-bold text-slate-900 dark:text-white group-hover:text-brand-600 dark:group-hover:text-brand-400 transition">{{ doc.full_name }}</h3>
+                <h3 class="text-base font-bold text-slate-900 dark:text-white group-hover:text-brand-600 dark:group-hover:text-brand-400 transition">{{ doc.full_name | doctorName }}</h3>
                 <span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 border border-brand-200/60 dark:border-brand-800 mt-1">
                   {{ doc.specialisation }}
                 </span>
@@ -211,12 +212,16 @@ export class DoctorSearchComponent implements OnInit {
   }
 
   getInitials(name: string): string {
-    return name
-      .split(' ')
-      .filter(n => !n.startsWith('Dr.'))
-      .map(n => n[0])
-      .join('')
-      .substring(0, 2)
-      .toUpperCase() || 'DR';
+    if (!name) return 'DR';
+    const cleaned = name.replace(/^((dr\.?|doctor)\s*)+/gi, '').trim();
+    return (
+      cleaned
+        .split(' ')
+        .filter(Boolean)
+        .map(n => n[0])
+        .join('')
+        .substring(0, 2)
+        .toUpperCase() || 'DR'
+    );
   }
 }

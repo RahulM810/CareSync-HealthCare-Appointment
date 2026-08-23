@@ -5,11 +5,12 @@ import { AuthService } from '../../../core/services/auth.service';
 import { ApiService } from '../../../core/services/api.service';
 import { LoadingSpinnerComponent } from '../../../shared/components/loading-spinner/loading-spinner.component';
 import { UrgencyBadgeComponent } from '../../../shared/components/urgency-badge/urgency-badge.component';
+import { DoctorNamePipe } from '../../../shared/pipes/doctor-name.pipe';
 
 @Component({
   selector: 'app-doctor-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterModule, LoadingSpinnerComponent, UrgencyBadgeComponent],
+  imports: [CommonModule, RouterModule, LoadingSpinnerComponent, UrgencyBadgeComponent, DoctorNamePipe],
   template: `
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       
@@ -21,7 +22,7 @@ import { UrgencyBadgeComponent } from '../../../shared/components/urgency-badge/
           </span>
           <h1 class="text-3xl font-extrabold tracking-tight">Today's Patient Queue</h1>
           <p class="text-slate-400 text-xs sm:text-sm mt-1">
-            Doctor: <strong class="text-white">{{ auth.currentUser()?.full_name }}</strong>
+            Doctor: <strong class="text-white">{{ auth.currentUser()?.full_name | doctorName }}</strong>
           </p>
         </div>
 
