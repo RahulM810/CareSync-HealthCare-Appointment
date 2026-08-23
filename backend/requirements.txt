@@ -17,3 +17,4 @@ pymongo
 python-multipart
 httpx
 pytest
+dotenv
