@@ -1,21 +1,44 @@
+import os
 import asyncio
-from typing import Optional, Tuple
+from typing import Optional
+
+from dotenv import load_dotenv
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-from app.config import settings
+
+
+# Load environment variables
+load_dotenv()
+
+# Google OAuth configuration
+GOOGLE_CLIENT_ID = os.environ["GOOGLE_CLIENT_ID"]
+GOOGLE_CLIENT_SECRET = os.environ["GOOGLE_CLIENT_SECRET"]
+
 
 class CalendarService:
-    def _build_service(self, access_token: str, refresh_token: Optional[str] = None):
+
+    def _build_service(
+        self,
+        access_token: str,
+        refresh_token: Optional[str] = None
+    ):
         creds = Credentials(
             token=access_token,
             refresh_token=refresh_token,
             token_uri="https://oauth2.googleapis.com/token",
-            client_id=settings.GOOGLE_CLIENT_ID,
-            client_secret=settings.GOOGLE_CLIENT_SECRET,
-            scopes=["https://www.googleapis.com/auth/calendar.events"]
+            client_id=GOOGLE_CLIENT_ID,
+            client_secret=GOOGLE_CLIENT_SECRET,
+            scopes=[
+                "https://www.googleapis.com/auth/calendar.events"
+            ]
         )
-        return build("calendar", "v3", credentials=creds)
+
+        return build(
+            "calendar",
+            "v3",
+            credentials=creds
+        )
+
 
     async def create_event(
         self,
@@ -29,32 +52,63 @@ class CalendarService:
     ) -> Optional[str]:
         """
         Creates an event in the user's primary Google Calendar.
-        Returns event_id if successful, None otherwise.
+        Returns the event ID if successful.
         """
+
         def _sync_create():
-            service = self._build_service(access_token, refresh_token)
+            service = self._build_service(
+                access_token,
+                refresh_token
+            )
+
             event_body = {
                 "summary": title,
                 "description": description,
                 "location": location,
-                "start": {"dateTime": start_time_iso, "timeZone": "UTC"},
-                "end": {"dateTime": end_time_iso, "timeZone": "UTC"},
+                "start": {
+                    "dateTime": start_time_iso,
+                    "timeZone": "UTC"
+                },
+                "end": {
+                    "dateTime": end_time_iso,
+                    "timeZone": "UTC"
+                },
                 "reminders": {
                     "useDefault": False,
                     "overrides": [
-                        {"method": "email", "minutes": 24 * 60},
-                        {"method": "popup", "minutes": 30},
-                    ],
-                },
+                        {
+                            "method": "email",
+                            "minutes": 24 * 60
+                        },
+                        {
+                            "method": "popup",
+                            "minutes": 30
+                        }
+                    ]
+                }
             }
-            created_event = service.events().insert(calendarId="primary", body=event_body).execute()
+
+            created_event = (
+                service.events()
+                .insert(
+                    calendarId="primary",
+                    body=event_body
+                )
+                .execute()
+            )
+
             return created_event.get("id")
 
         try:
             return await asyncio.to_thread(_sync_create)
+
         except Exception as e:
-            print(f"[CalendarService Error] Create event failed: {e}")
+            print(
+                f"[CalendarService Error] "
+                f"Create event failed: {e}"
+            )
             return None
+
 
     async def update_event(
         self,
@@ -69,22 +123,48 @@ class CalendarService:
         """
         Updates an existing event in the user's Google Calendar.
         """
+
         def _sync_update():
-            service = self._build_service(access_token, refresh_token)
+            service = self._build_service(
+                access_token,
+                refresh_token
+            )
+
             event_body = {
                 "summary": title,
                 "description": description,
-                "start": {"dateTime": start_time_iso, "timeZone": "UTC"},
-                "end": {"dateTime": end_time_iso, "timeZone": "UTC"},
+                "start": {
+                    "dateTime": start_time_iso,
+                    "timeZone": "UTC"
+                },
+                "end": {
+                    "dateTime": end_time_iso,
+                    "timeZone": "UTC"
+                }
             }
-            service.events().patch(calendarId="primary", eventId=event_id, body=event_body).execute()
+
+            (
+                service.events()
+                .patch(
+                    calendarId="primary",
+                    eventId=event_id,
+                    body=event_body
+                )
+                .execute()
+            )
+
             return True
 
         try:
             return await asyncio.to_thread(_sync_update)
+
         except Exception as e:
-            print(f"[CalendarService Error] Update event failed: {e}")
+            print(
+                f"[CalendarService Error] "
+                f"Update event failed: {e}"
+            )
             return False
+
 
     async def delete_event(
         self,
@@ -93,17 +173,35 @@ class CalendarService:
         event_id: str
     ) -> bool:
         """
-        Deletes an event from user's Google Calendar.
+        Deletes an event from the user's Google Calendar.
         """
+
         def _sync_delete():
-            service = self._build_service(access_token, refresh_token)
-            service.events().delete(calendarId="primary", eventId=event_id).execute()
+            service = self._build_service(
+                access_token,
+                refresh_token
+            )
+
+            (
+                service.events()
+                .delete(
+                    calendarId="primary",
+                    eventId=event_id
+                )
+                .execute()
+            )
+
             return True
 
         try:
             return await asyncio.to_thread(_sync_delete)
+
         except Exception as e:
-            print(f"[CalendarService Error] Delete event failed: {e}")
+            print(
+                f"[CalendarService Error] "
+                f"Delete event failed: {e}"
+            )
             return False
+
 
 calendar_service = CalendarService()
