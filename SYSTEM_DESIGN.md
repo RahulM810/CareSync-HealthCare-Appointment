@@ -1,91 +1,224 @@
-# CareSync Healthcare Platform — System Design & Architecture
+# CareSync — System Design & Architecture
 
-CareSync is a full-stack healthcare appointment and follow-up platform architected with **FastAPI**, **MongoDB Atlas (via Beanie ODM)**, **Groq AI (GPT OSS 20B)**, **Google Calendar API**, and an **Angular 22** client. It is engineered to operate 100% on free tiers with zero Redis/broker infrastructure while maintaining strict ACID-like transactional reliability.
+## Overview
+
+CareSync is a full-stack healthcare appointment and follow-up platform built with an Angular frontend, FastAPI backend, MongoDB Atlas database, Beanie ODM, Groq AI, Google Calendar API, Gmail SMTP, and APScheduler.
+
+The system supports three user roles:
+
+- **Patient** — searches doctors, books appointments, manages consultations, and receives follow-up information.
+- **Doctor** — manages appointments, schedules, leave requests, clinical notes, and prescriptions.
+- **Admin** — manages doctors, appointments, and notification records.
+
+The system is designed around preventing appointment conflicts and ensuring that failures in external services such as AI, email, and calendar APIs do not unnecessarily interrupt the main appointment workflow.
 
 ---
 
-## 1. 3-Layer Double-Booking Prevention & Slot Hold Engine
+## 1. Double-Booking Prevention
 
-A primary failure mode in healthcare platforms is race conditions: two patients booking the same doctor slot simultaneously. CareSync implements a defense-in-depth, three-layer concurrency control model:
+A major challenge in an appointment booking system is preventing two patients from booking the same doctor at the same time.
+
+CareSync uses multiple validation layers to reduce this risk.
+
+```text
+Patient A ──┐
+            ├──> Slot Hold Validation ──> Appointment Validation
+Patient B ──┘
+                        │
+                        ▼
+                  MongoDB Database
+```
+
+When a patient selects a time slot, the backend checks whether the slot is already held or booked.
+
+The booking process uses the doctor ID and appointment start time as the primary identifiers for a slot. Before creating an appointment, the system validates that another active appointment does not already occupy the same doctor and time.
+
+MongoDB acts as the final source of truth. If simultaneous requests attempt to reserve the same slot, database-level validation and duplicate handling prevent conflicting bookings from being accepted.
+
+If a conflict is detected, the API returns an appropriate error response instead of creating multiple appointments for the same slot.
+
+This layered approach ensures that frontend availability checks alone are not trusted, since multiple users can make requests simultaneously.
+
+---
+
+## 2. Slot Hold Mechanism
+
+CareSync uses a temporary slot hold mechanism to prevent a selected appointment slot from being immediately taken by another patient while the first patient completes the booking process.
+
+When a patient selects a slot, the frontend sends a request to:
 
 ```
-[ Patient Selects Slot ] ──> Layer 1: SlotHold with 5-Min MongoDB TTL Index
-                                     │ (DuplicateKey Error -> 409 Conflict)
-                                     ▼
-[ Patient Enters Symptoms ] ─> Layer 2: Optimistic Concurrency Control (version=1)
-                                     │ (Checks version atomicity)
-                                     ▼
-[ Confirm Appointment ] ─────> Layer 3: Partial Unique Index on MongoDB
-                                     (doctor_id, start_time) where status ∉ {CANCELLED}
-                                     │
-                                     ├─► Success: SlotHold Deleted, Side Effects Queued
-                                     └─► DuplicateKeyError: Returns 409 "Slot already booked"
+POST /api/patients/slots/hold
 ```
 
-### Layer 1: Ephemeral Slot Hold with MongoDB TTL Indexes
-When a patient clicks an available slot, the client invokes `POST /api/patients/slots/hold`.
-- The server attempts to insert a `SlotHold` document with `expires_at = datetime.utcnow() + 5 minutes`.
-- The collection features a compound unique index on `(doctor_id, start_time)` and a MongoDB TTL index on `expires_at` (`expireAfterSeconds: 0`).
-- If another patient has already placed a hold on that slot, MongoDB immediately rejects the second insertion with `DuplicateKeyError` (translated to HTTP 409 Conflict).
-- If the patient abandons the checkout flow or closes the tab, the MongoDB background TTL reaper automatically evicts the hold document after 300 seconds, releasing the slot without requiring an active server cleanup job.
+The backend creates a `SlotHold` document containing information such as:
 
-### Layer 2: Optimistic Concurrency Control (OCC)
-- Every `Appointment` document includes an integer `version` field (initialized at `1`).
-- Rescheduling operations perform conditional updates (`find_one_and_update` matching `id` and `version`). If the version has advanced, the update fails, preventing lost updates during simultaneous modifications.
+- Doctor ID
+- Appointment start time
+- Patient information
+- Hold expiration time
 
-### Layer 3: Database-Level Partial Unique Index
-- Even if two requests bypass Layer 1 due to simultaneous hold expirations, the core `appointments` collection enforces a unique compound index:
-  ```json
-  {
-    "doctor_id": 1,
-    "start_time": 1
-  },
-  {
-    "unique": true,
-    "partialFilterExpression": {
-      "status": { "$in": ["HELD", "CONFIRMED", "COMPLETED"] }
-    }
-  }
-  ```
-- Cancelled appointments (`status = "CANCELLED"`) are excluded from the uniqueness constraint, allowing cancelled slots to be freely rebooked by other patients while maintaining audit history.
+The hold is temporary and expires after approximately five minutes.
 
----
+```text
+Select Slot
+    │
+    ▼
+Create SlotHold
+    │
+    ▼
+5-Minute Temporary Reservation
+    │
+    ├── Booking Completed
+    │       │
+    │       ▼
+    │   Create Appointment
+    │   Remove SlotHold
+    │
+    └── Booking Abandoned
+            │
+            ▼
+       Hold Expires Automatically
+```
 
-## 2. Doctor Leave Management & Slot Invalidation
+MongoDB TTL functionality is used to automatically remove expired slot hold records.
 
-When a doctor or clinic administrator records a leave day (`POST /api/doctors/leave`):
-1. **Immediate Invalidation**: The `SlotService` checks the `DoctorLeave` collection before computing availability. Any date matching an active leave returns an empty slot array `[]`.
-2. **Affected Consultation Detection**: The query locates all existing appointments on that date with `status == "CONFIRMED"`.
-3. **Automated Patient Alerting**: An asynchronous task dispatches personalized `leave_conflict.html` email notices to all affected patients, explaining that their practitioner will be away and inviting them to select an alternative slot through the portal at no additional charge.
+This means that if a patient closes the browser or abandons the booking process, the slot eventually becomes available again without requiring manual cleanup.
 
----
-
-## 3. LLM Graceful Degradation & Non-Blocking Triage
-
-CareSync integrates Groq's high-speed LLM endpoint (`openai/gpt-oss-20b`) for two clinical workflows:
-1. **Pre-Visit Symptom Triage**: Extracts chief complaint, classifies urgency into `High`, `Medium`, or `Low`, and prepares three targeted diagnostic questions for the doctor.
-2. **Post-Visit Patient Summary**: Translates dense physician clinical notes and prescriptions into plain, empathetic patient language with a structured medication timetable.
-
-### Failure-Proof Resilience Architecture
-LLM API calls are inherently nondeterministic and subject to rate limits or latency spikes. The booking and notes-submission pipelines **never block on LLM failures**:
-- **Timeout & Retry**: Groq API calls are wrapped in a 10-second timeout with one automatic retry (2-second backoff).
-- **Rule-Based Heuristic Fallback**: If the Groq endpoint is unreachable or credentials are unconfigured, a deterministic fallback analyzes symptom keywords (e.g., chest pain, respiratory distress, fever) to assign a baseline urgency level.
-- **Audit Flagging**: Documents record `pre_visit_llm_failed: true` or `post_visit_llm_failed: true`, allowing administrators to view telemetry and re-run triage if necessary.
+When the booking is successfully completed, the temporary hold is removed and the permanent appointment record is created.
 
 ---
 
-## 4. Notification Reliability & In-Process APScheduler
+## 3. Doctor Leave Conflict Handling
 
-To avoid requiring an external Redis broker or separate Celery workers on free hosting tiers, CareSync utilizes **APScheduler** backed by **MongoDBJobStore**:
-- **Persistence Across Restarts**: Background job states and cron schedules (`appointment_reminders`, `medication_reminders`, `retry_failed_emails`) are persisted in the `apscheduler_jobs` collection in the same Atlas cluster.
-- **Exponential Retry Mechanism**: Every dispatched email is tracked in the `notifications` collection. If the SMTP transport fails, the `retry_failed_emails` cron job re-attempts delivery with exponential backoff up to 5 times.
-- **Medication Compliance Reminders**: When clinical notes contain prescriptions, daily medication reminder records are created and evaluated hourly against active treatment windows.
+Doctors can register leave through the doctor portal.
+
+When leave is created, the system stores the information in the `DoctorLeave` collection.
+
+```text
+Doctor Requests Leave
+        │
+        ▼
+Create DoctorLeave Record
+        │
+        ▼
+Check Existing Appointments
+        │
+        ├── No Conflict
+        │       │
+        │       ▼
+        │   Leave Recorded
+        │
+        └── Existing Appointments
+                │
+                ▼
+        Identify Affected Patients
+                │
+                ▼
+        Generate Notifications
+```
+
+The appointment availability system checks doctor leave records before returning available slots.
+
+If a doctor is unavailable on a particular date, the system does not offer appointment slots for that date.
+
+The system also checks for existing appointments that may conflict with the leave period.
+
+Affected patients can then be notified that their appointment may need to be cancelled or rescheduled.
+
+This prevents new bookings from being created during known doctor leave periods while also allowing existing appointment conflicts to be identified.
 
 ---
 
-## 5. Google Calendar Two-Way Synchronization
+## 4. Notification Failure Handling
 
-- Patients and doctors can connect their Google accounts via OAuth2 with `https://www.googleapis.com/auth/calendar.events` scope.
-- Upon appointment confirmation, CareSync creates a Google Calendar event containing consultation room, doctor credentials, and symptom notes.
-- Event updates (`PATCH`) occur automatically on reschedule, and event deletions (`DELETE`) occur automatically upon appointment cancellation.
-- Calendar sync operations run asynchronously in background tasks, ensuring external Google API errors never disrupt booking finalization.
+CareSync uses Gmail SMTP and `aiosmtplib` for email notifications.
+
+Email notifications are generated for events such as:
+
+- Appointment confirmations
+- Appointment reminders
+- Appointment changes
+- Doctor leave conflicts
+- Post-visit follow-up information
+- Medication reminders
+
+Each notification is stored in the MongoDB `Notification` collection before or during the delivery process.
+
+```text
+Application Event
+        │
+        ▼
+Create Notification Record
+        │
+        ▼
+Send Email
+        │
+        ├── Success
+        │       │
+        │       ▼
+        │   Status = SENT
+        │
+        └── Failure
+                │
+                ▼
+          Status = FAILED
+                │
+                ▼
+          Store Error Details
+                │
+                ▼
+          Background Retry Job
+```
+
+If email delivery fails, the notification is marked as `FAILED`.
+
+The system stores relevant information such as:
+
+- Recipient email
+- Notification type
+- Error message
+- Retry count
+- Notification status
+
+APScheduler runs a background job that periodically checks for failed notifications and attempts to resend them.
+
+This design prevents temporary SMTP or network failures from permanently losing notifications.
+
+Importantly, an email failure does not block the main application workflow. For example, an appointment can still be created successfully even if its confirmation email fails to send.
+
+---
+
+## 5. Supporting Architecture
+
+CareSync follows a client-server architecture.
+
+```text
+Angular Frontend
+       │
+       │ REST API
+       ▼
+FastAPI Backend
+       │
+       ├── MongoDB Atlas
+       ├── Groq AI
+       ├── Google Calendar API
+       ├── Gmail SMTP
+       └── APScheduler
+```
+
+The Angular frontend handles the user interface for patients, doctors, and administrators.
+
+The FastAPI backend manages:
+
+- Authentication and JWT authorization
+- Appointment booking
+- Slot validation
+- Doctor leave management
+- Notifications
+- AI symptom processing
+- Google Calendar integration
+
+MongoDB Atlas stores application data including users, doctor profiles, appointments, temporary slot holds, leave records, medication reminders, and notification logs.
+
+Sensitive configuration such as database credentials, JWT secrets, API keys, Gmail credentials, and Google OAuth credentials is stored using environment variables rather than hardcoded in the application source code.
